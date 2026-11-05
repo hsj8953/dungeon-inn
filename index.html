@@ -3128,7 +3128,7 @@ function renderPanel(){
       if(S.region>0){h+=`<div class="sec">다른 지역 재료</div>`;MAT_KEYS.filter(k=>MATS[k].reg<S.region).sort((a,b)=>MATS[b].reg-MATS[a].reg).forEach(k=>h+=row(k,S.mats[k],true));}
     }
   }
-  h+=`<div class="foot"><span>프로토타입 v2.2.1 · 진행은 이 브라우저에 저장돼요</span><span class="fbtns"><button data-act="savemgr">세이브 관리</button><button data-act="reset">처음부터</button></span></div>`;
+  h+=`<div class="foot"><span>프로토타입 v2.2.2 · 진행은 이 브라우저에 저장돼요</span><span class="fbtns"><button data-act="savemgr">세이브 관리</button><button data-act="reset">처음부터</button></span></div>`;
   const st=p.scrollTop;p.innerHTML=h;p.scrollTop=(MG&&tab==='forge')?0:st;lastSig=sigFor();panelDirty=false;
   bindHold();
 }
@@ -3390,6 +3390,18 @@ function restore(raw){
   S.advs.forEach(a=>{a.x=seatX(a);a.y=Y[1];});
   const ids=new Set(S.advs.map(a=>a.id));S.offers=(S.offers||[]).filter(o=>ids.has(o.advId));S.repairQ=(S.repairQ||[]).filter(q=>ids.has(q.advId));
 }
+function grantAway(away){
+  if(!(away>30))return;
+  const total=S.dayT+away;const days=Math.floor(total/DAY_LEN);for(let i=0;i<Math.min(days,10);i++)newDay(true);S.dayT=total%DAY_LEN;
+  const capped=Math.min(away,7200),gain=Math.floor((S.lastRate||0)*capped*.5);
+  if(gain>=1){
+    const mins=Math.max(1,Math.round(capped/60));
+    showModal('자리 비운 동안',`${mins}분 동안 손님들이 ${fmt(gain)}G를 두고 갔어요.`,[
+      {label:'받기',fn:()=>{S.gold+=gain;addLog(`자리 비운 동안 ${fmt(gain)}G를 벌었어요.`);save();}},
+      {label:'2배 받기<small>광고 자리</small>',primary:true,fn:()=>{S.gold+=gain*2;addLog(`자리 비운 동안 ${fmt(gain*2)}G를 벌었어요.`);save();}}]);
+  }
+  panelDirty=true;save();
+}
 function boot(data){
   fitCanvas();
   let raw=null;
@@ -3404,16 +3416,7 @@ function boot(data){
   if(bootErr){if(bootErr.recovered)showModal('세이브 복구','세이브를 읽다가 문제가 생겨서 가장 최근 자동 백업으로 불러왔어요.\n(오류: '+bootErr.message+')',[{label:'확인',primary:true}]);
     else showModal('세이브를 불러오지 못했어요','기존 세이브는 지우지 않고 보관해 뒀어요. 개발자에게 아래 오류를 알려주세요.\n(오류: '+bootErr.message+')',[{label:'잠시 그대로 두기',primary:true},{label:'새로 시작',fn:()=>{saveBlocked=false;save();}}]);}
   else if(!S.introShown){S.introShown=1;showModal(REG().name,REG().intro,[{label:'여관 문 열기',primary:true}]);}
-  if(!data||!data.save){
-    if(away>30){const total=S.dayT+away;const days=Math.floor(total/DAY_LEN);for(let i=0;i<Math.min(days,10);i++)newDay(true);S.dayT=total%DAY_LEN;}
-    const capped=Math.min(away,7200),gain=Math.floor(S.lastRate*capped*.5);
-    if(away>30&&gain>=1){
-      const mins=Math.max(1,Math.round(capped/60));
-      showModal('자리 비운 동안',`${mins}분 동안 손님들이 ${fmt(gain)}G를 두고 갔어요.`,[
-        {label:'받기',fn:()=>{S.gold+=gain;addLog(`자리 비운 동안 ${fmt(gain)}G를 벌었어요.`);}},
-        {label:'2배 받기<small>광고 자리</small>',primary:true,fn:()=>{S.gold+=gain*2;addLog(`자리 비운 동안 ${fmt(gain*2)}G를 벌었어요.`);}}]);
-    }
-  }
+  if(!data||!data.save)grantAway(away);
   window.claude?.hot?.snapshot?.(()=>({save:serialize()}));
   let last=performance.now(),saveT=0,uiT=0;
   function loop(now){
@@ -3444,7 +3447,32 @@ function boot(data){
   }
   tickUI();requestAnimationFrame(loop);
 }
-document.addEventListener('visibilitychange',()=>{if(document.hidden)save();});
+let hiddenAt=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){save();hiddenAt=Date.now();}
+  else if(hiddenAt){const away=(Date.now()-hiddenAt)/1000;hiddenAt=0;if(!BT&&!MG&&!(PT&&PT.phase!=='info'))grantAway(away);}
+});
+/* back button: 종료 확인 */
+let exiting=false;
+function trapBack(){try{history.pushState({inn:1},'');}catch(e){}}
+function askExit(){
+  showModal('게임을 종료할까요?','진행 상황은 저장돼요. 자리를 비운 동안에도 손님들이 골드를 두고 가요.',[
+    {label:'아니요',primary:true},
+    {label:'예',fn:()=>{save();exiting=true;try{window.close();}catch(e){}history.go(-2);
+      setTimeout(()=>{if(!document.hidden){exiting=false;trapBack();toast('홈 버튼으로 나가 주세요. 진행은 저장됐어요.');}},500);}}]);
+}
+const APPMODE=(()=>{try{return matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches||navigator.standalone===true;}catch(e){return false;}})();
+if(APPMODE)window.addEventListener('popstate',()=>{
+  if(exiting)return;trapBack();
+  if(!$('modal').hidden){$('modal').hidden=true;ovClosedAt=performance.now();tickUI();return;}
+  if(!$('savemgr').hidden){$('savemgr').hidden=true;return;}
+  if(!$('book').hidden){$('book').hidden=true;BK=null;return;}
+  if(PT){if(PT.phase==='info'||PT.phase==='result'){closePromo();renderPanel();}return;}
+  if(BT||MG)return;
+  if(tab!=='inn'){setTab('inn');return;}
+  askExit();
+});
+if(APPMODE)trapBack();
 window.addEventListener('pagehide',save);
 window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
 })();
