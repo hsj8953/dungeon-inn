@@ -2864,7 +2864,9 @@ function promoDyn(){if(!PT)return;const T=PT.test;
   if(T==='duel'){const z=$('prZone'),c=$('prCur');if(!z)return;z.style.left=((PT.z-.085)*100)+'%';z.style.width=(17)+'%';c.style.left=(PT.p*100)+'%';}
 }
 $('promo').addEventListener('pointerdown',e=>{const b=e.target.closest('[data-pa]');if(!b||b.disabled)return;const [k,v]=b.dataset.pa.split(':');
-  if(k==='close'){closePromo();renderPanel();return;}if(k==='start'){startPromo();return;}e.preventDefault();promoTap(k,v);});
+  if(k==='close'||k==='start')return;e.preventDefault();promoTap(k,v);});
+$('promo').addEventListener('click',e=>{const b=e.target.closest('[data-pa]');if(!b||b.disabled)return;const k=b.dataset.pa.split(':')[0];
+  if(k==='close'){e.preventDefault();e.stopPropagation();setTimeout(()=>{closePromo();renderPanel();},0);}else if(k==='start'){startPromo();}});
 function hitMsg(text){const el=$('hit');el.textContent=text;el.classList.remove('on');void el.offsetWidth;el.classList.add('on');}
 function costLabel(c){if(!c)return '최대';if(c.lock)return c.lock;return `${fmt(c.gold)}G${c.mat?` + ${MATS[c.mat].short} ${c.n}`:''}`;}
 function hearts(a){const n=Math.round(a.aff/20);let h='';for(let i=0;i<5;i++)h+=i<n?'♥':'<span class="off">♥</span>';return `<span class="hearts" aria-label="호감도 ${a.aff}">${h}</span>`;}
