@@ -3128,7 +3128,7 @@ function renderPanel(){
       if(S.region>0){h+=`<div class="sec">다른 지역 재료</div>`;MAT_KEYS.filter(k=>MATS[k].reg<S.region).sort((a,b)=>MATS[b].reg-MATS[a].reg).forEach(k=>h+=row(k,S.mats[k],true));}
     }
   }
-  h+=`<div class="foot"><span>프로토타입 v2.2.3 · 진행은 이 브라우저에 저장돼요</span><span class="fbtns"><button data-act="savemgr">세이브 관리</button><button data-act="reset">처음부터</button></span></div>`;
+  h+=`<div class="foot"><span>프로토타입 v2.2.4 <small style="opacity:.5">${BACKMODE}</small> · 진행은 이 브라우저에 저장돼요</span><span class="fbtns"><button data-act="savemgr">세이브 관리</button><button data-act="reset">처음부터</button></span></div>`;
   const st=p.scrollTop;p.innerHTML=h;p.scrollTop=(MG&&tab==='forge')?0:st;lastSig=sigFor();panelDirty=false;
   bindHold();
 }
@@ -3452,10 +3452,15 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){save();hiddenAt=Date.now();}
   else if(hiddenAt){const away=(Date.now()-hiddenAt)/1000;hiddenAt=0;if(!BT&&!MG&&!(PT&&PT.phase!=='info'))grantAway(away);}
 });
-/* back button: 종료 확인 — 기록은 사용자 터치 중에만 추가 (크롬이 터치 없이 넣은 기록은 건너뜀) */
-let exiting=false,exitAsk=false,backDepth=0;
+/* back button: 종료 확인 — CloseWatcher(안드로이드 뒤로가기 전용 API) 우선, 없으면 history */
+let exiting=false,exitAsk=false,backDepth=0,cw=null;
 const APPMODE=(()=>{try{return window.top===window;}catch(e){return false;}})();
-function trapBack(){if(backDepth>0)return;try{history.pushState({inn:1},'');backDepth=1;}catch(e){}}
+const USE_CW=APPMODE&&typeof CloseWatcher==='function';
+const BACKMODE=!APPMODE?'off':USE_CW?'cw':'hist';
+function trapBack(){
+  if(USE_CW){if(cw)return;try{cw=new CloseWatcher();cw.onclose=()=>{cw=null;handleBack();};}catch(e){cw=null;}return;}
+  if(backDepth>0)return;try{history.pushState({inn:1},'');backDepth=1;}catch(e){}
+}
 function askExit(){
   exitAsk=true;save();
   showModal('게임을 종료할까요?','진행 상황은 저장돼요. 자리를 비운 동안에도 손님들이 골드를 두고 가요.\n(뒤로가기를 한 번 더 눌러도 종료돼요)',[
@@ -3463,17 +3468,20 @@ function askExit(){
     {label:'예',fn:()=>{save();exiting=true;try{window.close();}catch(e){}
       setTimeout(()=>{if(!document.hidden){exiting=false;exitAsk=false;toast('뒤로가기를 한 번 더 누르면 종료돼요');}},400);}}]);
 }
+function handleBack(){
+  if(exiting)return;
+  const rearm=()=>{trapBack();};
+  if(!$('modal').hidden){$('modal').hidden=true;exitAsk=false;ovClosedAt=performance.now();tickUI();return rearm();}
+  if(!$('savemgr').hidden){$('savemgr').hidden=true;return rearm();}
+  if(!$('book').hidden){$('book').hidden=true;BK=null;return rearm();}
+  if(PT){if(PT.phase==='info'||PT.phase==='result'){closePromo();renderPanel();}return rearm();}
+  if(BT||MG)return rearm();
+  if(tab!=='inn'){setTab('inn');return rearm();}
+  askExit();
+}
 if(APPMODE){
-  window.addEventListener('popstate',()=>{
-    backDepth=0;if(exiting)return;
-    if(!$('modal').hidden){$('modal').hidden=true;exitAsk=false;ovClosedAt=performance.now();tickUI();return;}
-    if(!$('savemgr').hidden){$('savemgr').hidden=true;return;}
-    if(!$('book').hidden){$('book').hidden=true;BK=null;return;}
-    if(PT){if(PT.phase==='info'||PT.phase==='result'){closePromo();renderPanel();}return;}
-    if(BT||MG)return;
-    if(tab!=='inn'){setTab('inn');return;}
-    askExit();
-  });
+  if(!USE_CW)window.addEventListener('popstate',()=>{backDepth=0;handleBack();});
+  if(USE_CW)trapBack();
   const arm=()=>{if(!exiting&&!exitAsk)trapBack();};
   document.addEventListener('pointerup',arm,true);document.addEventListener('touchend',arm,true);document.addEventListener('keydown',arm,true);
 }
