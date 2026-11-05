@@ -2782,7 +2782,8 @@ function promoReq(a){const p=PROMO[a.rar];if(!p)return {ready:false};const pw=po
   const cost=[{l:'골드',k:'gold',cur:S.gold,need:g}].concat(p.stones.map(([k,c])=>({l:STONES[k].name,k,cur:S.stones[k]||0,need:c}))).map(c=>Object.assign(c,{ok:c.cur>=c.need}));
   return {p,checks,cost,gold:g,ready:checks.every(c=>c.ok)&&cost.every(c=>c.ok)};}
 function openPromo(id){const a=advById(id);if(!a||a.rar>=4)return;PT={phase:'info',id};renderPromo();}
-function closePromo(){PT=null;renderPromo();panelDirty=true;}
+let ovClosedAt=0;
+function closePromo(){PT=null;renderPromo();panelDirty=true;ovClosedAt=performance.now();}
 function startPromo(){const a=advById(PT.id);if(!a)return closePromo();const R=promoReq(a);if(!R.ready)return;
   S.gold-=R.gold;R.p.stones.forEach(([k,c])=>S.stones[k]-=c);
   const T=R.p.test;PT=Object.assign(PT,{phase:'ready',test:T,t:0,cd:3,score:0,miss:0,paid:R});
@@ -3190,6 +3191,7 @@ $('mgx').addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(
 window.addEventListener('pointerup',()=>{holding=false;setTimeout(()=>{pressing=false;},60);});
 window.addEventListener('pointercancel',()=>{holding=false;pressing=false;});
 cv.addEventListener('click',e=>{
+  if(performance.now()-ovClosedAt<600||PT)return;
   const {x,y}=canvasPt(e);
   if(scene==='forge'){if(MG&&MG.type==='craft')strike();return;}
   if(scene==='market'||scene==='boss'||scene==='kitchen')return;
@@ -3319,13 +3321,13 @@ function drawBook(){
 }
 $('bkPrev').addEventListener('click',()=>{if(BK&&BK.p>0){BK.p--;drawBook();}});
 $('bkNext').addEventListener('click',()=>{if(BK&&BK.p<BK.pages.length-1){BK.p++;drawBook();}});
-$('bkClose').addEventListener('click',()=>{$('book').hidden=true;BK=null;});
+$('bkClose').addEventListener('click',()=>{$('book').hidden=true;BK=null;ovClosedAt=performance.now();});
 $('book').addEventListener('click',e=>{if(e.target.id==='book'){$('book').hidden=true;BK=null;}});
 function showModal(title,body,btns,imgUrl){
   $('mTitle').textContent=title;$('mBody').textContent=body;const box=$('mBtns');box.innerHTML='';
   const mi=$('mImg');if(imgUrl){mi.src=imgUrl;mi.hidden=false;}else mi.hidden=true;
   btns.forEach(b=>{const el=document.createElement('button');el.className='btn'+(b.primary?'':' ghost');el.innerHTML=b.label;
-    el.addEventListener('click',()=>{$('modal').hidden=true;b.fn&&b.fn();tickUI();});box.appendChild(el);});
+    el.addEventListener('click',()=>{$('modal').hidden=true;ovClosedAt=performance.now();b.fn&&b.fn();tickUI();});box.appendChild(el);});
   $('modal').hidden=false;
 }
 
